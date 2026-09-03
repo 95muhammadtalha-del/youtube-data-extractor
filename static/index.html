@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Data Extractor — Channel Analytics Tool</title>
+    <meta name="description" content="Extract YouTube channel data including shorts and long videos, and export to Excel.">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>▶️</text></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <canvas id="particles"></canvas>
+    <div id="top-progress-bar"></div>
+    <div id="toast-container"></div>
+
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <div class="logo-icon"></div>
+            <h1>YouTube Data Extractor</h1>
+            <div class="subtitle">Extract &amp; analyze any channel instantly</div>
+        </header>
+
+        <!-- Settings Toggle Button -->
+        <div class="settings-toggle-wrapper">
+            <button id="settings-toggle-btn" class="settings-toggle-btn" aria-label="Open Settings">
+                <span class="gear-icon">⚙️</span> Settings
+            </button>
+            <span id="key-status-badge" class="key-badge hidden">
+                <span class="key-dot"></span>
+                <span id="key-badge-text">No Key</span>
+            </span>
+        </div>
+
+        <!-- Settings Panel -->
+        <section id="settings-panel" class="glass-card settings-panel hidden">
+            <div class="settings-header">
+                <h3>🔑 YouTube API Key</h3>
+                <button id="settings-close-btn" class="settings-close-btn" aria-label="Close Settings">✕</button>
+            </div>
+            <p class="settings-desc">
+                Enter your YouTube Data API v3 key below. 
+                <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Get one from Google Cloud Console →</a>
+            </p>
+            <div class="settings-input-row">
+                <input type="password" id="api-key-input" placeholder="Paste your YouTube API key here..." aria-label="API Key">
+                <button id="toggle-key-visibility" class="icon-btn" aria-label="Toggle key visibility">👁️</button>
+            </div>
+            <div class="settings-actions">
+                <button id="test-key-btn" class="btn btn-outline">🧪 Test Key</button>
+                <button id="save-key-btn" class="btn btn-primary">💾 Save Key</button>
+            </div>
+            <div id="key-test-result" class="key-test-result hidden"></div>
+
+            <!-- Cookies Section -->
+            <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 25px 0 15px 0;">
+            <div class="settings-header">
+                <h3>🍪 Download Cookies (Bypass Bot Block)</h3>
+            </div>
+            <p class="settings-desc">
+                If downloads fail, use the "Get cookies.txt LOCALLY" extension to export your YouTube cookies and paste the contents here.
+            </p>
+            <textarea id="cookies-input" placeholder="Paste cookies.txt contents here..." rows="4" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); color: #0f0; padding: 10px; border-radius: 8px; font-family: monospace; font-size: 0.8rem; margin-bottom: 15px; resize: vertical;"></textarea>
+            
+            <div class="settings-actions" style="display: flex; gap: 10px;">
+                <input type="file" id="cookies-file-upload" accept=".txt" style="display: none;">
+                <button id="browse-cookies-btn" class="btn btn-outline">📂 Browse File</button>
+                <button id="save-cookies-btn" class="btn btn-primary">💾 Save Cookies</button>
+            </div>
+            <div id="cookies-save-result" class="key-test-result hidden" style="margin-top: 10px;"></div>
+        </section>
+
+        <!-- Search Section -->
+        <section class="search-section glass-card">
+            <input type="text" id="search-input" placeholder="Paste channel URLs or @handles (comma separated for bulk)..." aria-label="Search channel">
+            <button id="search-btn" aria-label="Extract Data">
+                <span class="search-btn-text">🔍 Extract Data</span>
+                <span class="search-btn-loading hidden">
+                    <span class="spinner"></span> Extracting...
+                </span>
+            </button>
+        </section>
+
+        <!-- Error Container -->
+        <div id="error-container" class="glass-card">
+            <span class="error-icon">⚠️</span>
+            <span id="error-message">Error message here</span>
+        </div>
+
+        <!-- Skeleton Loading -->
+        <section id="skeleton-section">
+            <div class="glass-card skeleton" style="height: 120px; margin-bottom: 2rem;"></div>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-bottom: 2rem;">
+                <div class="glass-card skeleton" style="height: 100px;"></div>
+                <div class="glass-card skeleton" style="height: 100px;"></div>
+                <div class="glass-card skeleton" style="height: 100px;"></div>
+            </div>
+            <div class="glass-card skeleton" style="height: 300px;"></div>
+        </section>
+
+        <!-- Results Section -->
+        <section id="results-section">
+            <!-- Channel Card -->
+            <div id="channel-card" class="glass-card channel-card">
+                <div class="channel-banner-bg" id="channel-banner"></div>
+                <img id="channel-thumb" class="channel-thumb" src="" alt="Channel Thumbnail">
+                <div class="channel-info">
+                    <h2 id="channel-title">Channel Name</h2>
+                    <p id="channel-handle" class="channel-handle">@handle</p>
+                    <p class="channel-meta">
+                        <span class="meta-item">👥 <span id="channel-subs">0</span></span>
+                        <span class="meta-divider">•</span>
+                        <span class="meta-item">👁️ <span id="channel-views">0</span></span>
+                        <span class="meta-divider">•</span>
+                        <span class="meta-item">📅 <span id="channel-date">—</span></span>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Stats Row -->
+            <div id="stats-row">
+                <div class="stat-card glass-card total">
+                    <div class="stat-icon">📊</div>
+                    <div class="stat-value" id="stat-total">0</div>
+                    <div class="stat-label">Total Videos</div>
+                </div>
+                <div class="stat-card glass-card shorts">
+                    <div class="stat-icon">📹</div>
+                    <div class="stat-value" id="stat-shorts">0</div>
+                    <div class="stat-label">Shorts</div>
+                </div>
+                <div class="stat-card glass-card longs">
+                    <div class="stat-icon">🎬</div>
+                    <div class="stat-value" id="stat-longs">0</div>
+                    <div class="stat-label">Long Videos</div>
+                </div>
+            </div>
+
+            <!-- Shorts Table -->
+            <div class="table-section">
+                <div class="table-header" role="button" aria-expanded="true">
+                    <h3>📹 Shorts <span id="shorts-count-label" class="count-label">(0)</span></h3>
+                    <span class="chevron">▼</span>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Title</th>
+                                <th>Duration</th>
+                                <th data-sort="date">Date ↕</th>
+                                <th data-sort="views">Views ↕</th>
+                                <th data-sort="likes">Likes ↕</th>
+                                <th data-sort="comments">Comments ↕</th>
+                                <th>Link</th>
+                            </tr>
+                        </thead>
+                        <tbody id="shorts-table-body"></tbody>
+                    </table>
+                    <div id="shorts-load-more" class="load-more-wrapper hidden">
+                        <button class="btn btn-outline load-more-btn">Load More</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Long Videos Table -->
+            <div class="table-section">
+                <div class="table-header" role="button" aria-expanded="true">
+                    <h3>🎬 Long Videos <span id="longs-count-label" class="count-label">(0)</span></h3>
+                    <span class="chevron">▼</span>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Title</th>
+                                <th>Duration</th>
+                                <th data-sort="date">Date ↕</th>
+                                <th data-sort="views">Views ↕</th>
+                                <th data-sort="likes">Likes ↕</th>
+                                <th data-sort="comments">Comments ↕</th>
+                                <th>Link</th>
+                            </tr>
+                        </thead>
+                        <tbody id="longs-table-body"></tbody>
+                    </table>
+                    <div id="longs-load-more" class="load-more-wrapper hidden">
+                        <button class="btn btn-outline load-more-btn">Load More</button>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- Multi-Channel Comparison Section -->
+        <section id="multi-channel-section" class="hidden">
+            <div class="glass-card channel-info" style="text-align: center; padding: 30px;">
+                <h2 style="margin-bottom: 15px;">📊 Competitor Analysis Mode</h2>
+                <p style="color: var(--text-secondary); margin-bottom: 20px;">You extracted multiple channels. Download the master Excel report below to compare their statistics and videos side-by-side.</p>
+                <div id="multi-channel-list" style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap; margin-bottom: 25px;"></div>
+            </div>
+        </section>
+
+        <section id="download-section" class="hidden" style="margin-top: 20px;">
+            <!-- Download Buttons -->
+            <div class="download-actions" style="display: flex; gap: 10px;">
+                <button id="download-btn" class="action-btn excel-btn">
+                    <span class="download-btn-text">📊 Download Excel Report</span>
+                    <span class="download-btn-loading hidden">
+                        <span class="spinner"></span> Generating...
+                    </span>
+                </button>
+            </div>
+        </section>
+    </div>
+
+    <script src="/static/app.js?v=5"></script>
+</body>
+</html>
