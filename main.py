@@ -290,3 +290,43 @@ async def get_cookies():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="127.0.0.1", port=9000, reload=True)
+@app.get("/api/download-excel")
+async def download_excel_get(query: str):
+    api_key = get_api_key()
+    if not query:
+        raise HTTPException(status_code=400, detail="Query is required")
+        
+    yt = YouTubeService(api_key=api_key)
+    queries = [q.strip() for q in query.split(',') if q.strip()]
+    
+    results = []
+    for q in queries:
+        try:
+            data = yt.extract_channel_data(q)
+            results.append(data)
+        except Exception as e:
+            logger.error(f"Failed to extract {q}: {e}")
+            if len(queries) == 1:
+                raise HTTPException(status_code=500, detail=f"Extraction failed: {str(e)}")
+
+    if not results:
+        raise HTTPException(status_code=400, detail="No data extracted")
+        
+    try:
+        excel_file = create_excel(results)
+        
+        if len(results) == 1:
+            channel_name = results[0].get('channel', {}).get('name', 'Unknown')
+            safe_name = "".join([c for c in channel_name if c.isalpha() or c.isdigit() or c==' ']).rstrip()
+            filename = f"{safe_name}_YouTube_Data.xlsx"
+        else:
+            filename = "YouTube_Competitor_Analysis.xlsx"
+            
+        return StreamingResponse(
+            excel_file,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    except Exception as e:
+        logger.error(f"Excel error: {e}")
+        raise HTTPException(status_code=500, detail=f"Excel generation failed: {str(e)}")

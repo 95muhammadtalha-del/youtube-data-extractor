@@ -522,53 +522,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // ======================== Excel Download ========================
     downloadBtn.addEventListener('click', handleDownload);
     async function handleDownload() {
-        if (!extractedData || isLoading) return;
-
-        downloadBtn.disabled = true;
-        downloadBtn.querySelector('.download-btn-text').classList.add('hidden');
-        downloadBtn.querySelector('.download-btn-loading').classList.remove('hidden');
-
-        try {
-            const response = await fetch('/api/export-excel', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ data: extractedData })
-            });
-
-            if (!response.ok) {
-                const err = await response.json();
-                throw new Error(err.detail || 'Excel generation failed');
-            }
-
-            // Get the blob and trigger download
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-
-            // Extract filename from Content-Disposition header if available
-            const disposition = response.headers.get('Content-Disposition');
-            let filename = 'YouTube_Channel_Data.xlsx';
-            if (disposition) {
-                const match = disposition.match(/filename="?(.+?)"?$/);
-                if (match) filename = decodeURIComponent(match[1]);
-            }
-
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            window.URL.revokeObjectURL(url);
-
-            showToast('Excel report downloaded successfully!', 'success');
-
-        } catch (error) {
-            showToast('Download failed: ' + error.message, 'error');
-        } finally {
-            downloadBtn.disabled = false;
-            downloadBtn.querySelector('.download-btn-text').classList.remove('hidden');
-            downloadBtn.querySelector('.download-btn-loading').classList.add('hidden');
-        }
+        const queryInput = document.getElementById('search-input').value.trim();
+        if (!queryInput || isLoading) return;
+        
+        showToast('Generating Excel report... (this may take a few seconds)', 'success');
+        
+        // Use GET endpoint to bypass Vercel's 4.5MB request body limit
+        const url = `/api/download-excel?query=${encodeURIComponent(queryInput)}`;
+        window.location.href = url;
     }
 
     // ======================== Utilities ========================
