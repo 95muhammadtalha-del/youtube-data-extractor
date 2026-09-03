@@ -525,11 +525,58 @@ document.addEventListener('DOMContentLoaded', () => {
         const queryInput = document.getElementById('search-input').value.trim();
         if (!queryInput || isLoading) return;
         
-        showToast('Generating Excel report... (this may take a few seconds)', 'success');
+        // Disable button and show spinner
+        downloadBtn.disabled = true;
+        downloadBtn.querySelector('.download-btn-text').classList.add('hidden');
+        downloadBtn.querySelector('.download-btn-loading').classList.remove('hidden');
         
-        // Use GET endpoint to bypass Vercel's 4.5MB request body limit
-        const url = `/api/download-excel?query=${encodeURIComponent(queryInput)}`;
-        window.location.href = url;
+        showToast('Generating Excel report... (this may take up to 60 seconds)', 'success');
+        
+        try {
+            // Use GET endpoint to bypass Vercel's 4.5MB request body limit
+            const url = `/api/download-excel?query=${encodeURIComponent(queryInput)}`;
+            const response = await fetch(url);
+            
+            if (!response.ok) {
+                let errText = await response.text();
+                try {
+                    let errObj = JSON.parse(errText);
+                    throw new Error(errObj.detail || 'Download failed');
+                } catch (e) {
+                    throw new Error(`Server returned ${response.status}`);
+                }
+            }
+            
+            // Get the blob and trigger download natively
+            const blob = await response.blob();
+            const blobUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            
+            // Extract filename from header
+            const disposition = response.headers.get('Content-Disposition');
+            let filename = 'YouTube_Channel_Data.xlsx';
+            if (disposition) {
+                const match = disposition.match(/filename="?(.+?)"?$/);
+                if (match) filename = decodeURIComponent(match[1]);
+            }
+            
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(blobUrl);
+            
+            showToast('Excel report downloaded successfully!', 'success');
+            
+        } catch (error) {
+            showToast('Download failed: ' + error.message, 'error');
+        } finally {
+            // Re-enable button
+            downloadBtn.disabled = false;
+            downloadBtn.querySelector('.download-btn-text').classList.remove('hidden');
+            downloadBtn.querySelector('.download-btn-loading').classList.add('hidden');
+        }
     }
 
     // ======================== Utilities ========================
