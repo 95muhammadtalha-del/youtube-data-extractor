@@ -11,7 +11,6 @@ from dotenv import load_dotenv, set_key
 
 from youtube_service import YouTubeService
 from excel_exporter import create_excel
-import yt_dlp
 import re
 
 # load_dotenv is called after BASE_DIR resolution below
@@ -287,129 +286,6 @@ async def get_cookies():
         with open(cookie_file, 'r', encoding='utf-8') as f:
             return {"cookies": f.read()}
     return {"cookies": ""}
-
-def background_download_task(data: dict):
-    channel_name = data.get('channel', {}).get('name', 'Unknown Channel')
-    safe_name = re.sub(r'[\\/*?:"<>|]', "", channel_name).strip()
-    
-    downloads_dir = BASE_DIR / 'Downloads' / safe_name
-    shorts_dir = downloads_dir / 'Shorts'
-    longs_dir = downloads_dir / 'Long Videos'
-    
-    os.makedirs(shorts_dir, exist_ok=True)
-    os.makedirs(longs_dir, exist_ok=True)
-    
-    import time
-    def download_videos(videos, out_dir):
-        if not videos: return
-        
-        current_cookie_strategy = 'android_client'
-        
-        def get_ydl(strategy):
-            opts = {
-                'format': 'best',
-                'outtmpl': str(out_dir / '%(title)s [%(id)s].%(ext)s'),
-                'ignoreerrors': False,
-                'quiet': True,
-                'no_warnings': True,
-                'noprogress': True,
-            }
-            
-            cookie_file = BASE_DIR / 'cookies.txt'
-            if cookie_file.exists() and strategy != 'no_cookies_tv':
-                opts['cookiefile'] = str(cookie_file)
-                
-            if strategy == 'chrome':
-                if not cookie_file.exists(): opts['cookiesfrombrowser'] = ('chrome',)
-                opts['extractor_args'] = {'youtube': ['player_client=web']}
-            elif strategy == 'edge':
-                if not cookie_file.exists(): opts['cookiesfrombrowser'] = ('edge',)
-                opts['extractor_args'] = {'youtube': ['player_client=web']}
-            elif strategy == 'android_client':
-                opts['extractor_args'] = {'youtube': ['player_client=android']}
-            elif strategy == 'tv_client':
-                opts['extractor_args'] = {'youtube': ['player_client=tv']}
-            elif strategy == 'no_cookies_tv':
-                opts['extractor_args'] = {'youtube': ['player_client=tv']}
-            elif strategy == 'ios_client':
-                opts['extractor_args'] = {'youtube': ['player_client=ios']}
-                
-            return yt_dlp.YoutubeDL(opts)
-
-        try:
-            for v in videos:
-                current_cookie_strategy = 'android_client'
-                ydl = get_ydl(current_cookie_strategy)
-                ydl.__enter__()
-                
-                url = f"https://www.youtube.com/watch?v={v['video_id']}"
-                title = v.get('title', url)
-                add_log(f"Starting: {title}")
-                
-                success = False
-                for attempt in range(6): 
-                    try:
-                        ret_code = ydl.download([url])
-                        if ret_code != 0:
-                            raise Exception("Download failed (yt-dlp returned non-zero)")
-                        success = True
-                        add_log(f"✅ Downloaded: {title}")
-                        break
-                    except Exception as e:
-                        error_msg = str(e).lower()
-                        if 'cookie' in error_msg or 'bot' in error_msg or 'sign in' in error_msg or 'too many requests' in error_msg or 'reload' in error_msg or 'reloaded' in error_msg:
-                            add_log(f"⚠️ {current_cookie_strategy.upper()} blocked. Trying next bypass method...")
-                            ydl.__exit__(None, None, None)
-                            
-                            if current_cookie_strategy == 'android_client':
-                                current_cookie_strategy = 'tv_client'
-                            elif current_cookie_strategy == 'tv_client':
-                                current_cookie_strategy = 'ios_client'
-                            elif current_cookie_strategy == 'ios_client':
-                                current_cookie_strategy = 'chrome'
-                            elif current_cookie_strategy == 'chrome':
-                                current_cookie_strategy = 'edge'
-                            elif current_cookie_strategy == 'edge':
-                                current_cookie_strategy = 'no_cookies_tv'
-                            else:
-                                add_log(f"❌ FAILED: All bypass methods exhausted.")
-                                break 
-                                
-                            ydl = get_ydl(current_cookie_strategy)
-                            ydl.__enter__()
-                        else:
-                            add_log(f"❌ ERROR: {e}")
-                            break
-                            
-                # Sleep to prevent bot-blocking
-                import random
-                delay = random.uniform(6.0, 10.0)
-                time.sleep(delay)
-                ydl.__exit__(None, None, None)
-        except Exception as outer_e:
-            add_log(f"❌ Fatal Loop Error: {outer_e}")
-
-    download_logs.clear()
-    add_log(f"Initializing download for {channel_name}...")
-    add_log(f"Saving to {downloads_dir}")
-    
-    if data.get('shorts'):
-        add_log("--- Downloading Shorts ---")
-        download_videos(data['shorts'], shorts_dir)
-        
-    if data.get('long_videos'):
-        add_log("--- Downloading Long Videos ---")
-        download_videos(data['long_videos'], longs_dir)
-        
-    add_log("🎉 All download attempts finished!")
-
-@app.post("/api/download-channel")
-async def download_channel(request: DownloadRequest, background_tasks: BackgroundTasks):
-    try:
-        background_tasks.add_task(background_download_task, request.data)
-        return {"status": "ok", "message": "Download started in the background. Check your Downloads folder!"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
